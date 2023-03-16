@@ -45,6 +45,7 @@ export type ConnectUsbReaderParams = {
 export type ConnectLocalMobileParams = {
   reader: Reader.Type;
   locationId?: string;
+  onBehalfOf?: string;
 };
 
 export type ConnectHandoffParams = {
@@ -160,6 +161,7 @@ export type CreatePaymentIntentParams = CreatePaymentIntentIOSParams & {
   transferGroup?: string;
   metadata?: Record<string, string>;
   paymentMethodOptions?: PaymentMethodOptions;
+  captureMethod?: 'automatic' | 'manual';
 };
 
 export type CreatePaymentIntentIOSParams = {
