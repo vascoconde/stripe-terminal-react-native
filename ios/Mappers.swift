@@ -71,6 +71,7 @@ class Mappers {
         case DeviceType.wisePosE: return "wisePosE"
         case DeviceType.wisePosEDevKit: return "wisePosEDevkit"
         case DeviceType.stripeS700DevKit: return "stripeS700Devkit"
+        case DeviceType.appleBuiltIn: return "appleBuiltIn"
         default: return "unknown"
         }
     }
@@ -229,6 +230,7 @@ class Mappers {
         case ReaderDisplayMessage.swipeCard: return "swipeCard"
         case ReaderDisplayMessage.tryAnotherCard: return "tryAnotherCard"
         case ReaderDisplayMessage.tryAnotherReadMethod: return "tryAnotherReadMethod"
+        case ReaderDisplayMessage.cardRemovedTooEarly: return "cardRemovedTooEarly"
         default: return "unknown"
         }
     }

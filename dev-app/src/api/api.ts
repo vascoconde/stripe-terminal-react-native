@@ -3,13 +3,36 @@ import type { Stripe } from 'stripe';
 // Disclaimer: we're using the client layer in lieu of a merchant backend in order
 // to allow dynamic switching of merchant accounts within the app. This eases dev and qa
 // validation within stripe and SHOULD NOT be used as prior art for your own POS implementation
+
+interface RequestedPriority {
+  requested_priority: string;
+}
+
+interface CardPresentEx {
+  routing: RequestedPriority;
+}
+
+interface PaymentMethodOptionsEx {
+  card_present: CardPresentEx;
+}
+
+interface PaymentIntentCreateParamsEx {
+  payment_method_options: PaymentMethodOptionsEx;
+}
+
+type NewPaymentIntentCreateParams = Stripe.PaymentIntentCreateParams &
+  PaymentIntentCreateParamsEx;
+
 export class Api {
   secretKey: string;
+
+  directChargeStripeAccountID = '';
 
   headers: Record<string, string>;
 
   constructor() {
     this.secretKey = '';
+    this.directChargeStripeAccountID = '';
     this.headers = {};
   }
 
@@ -22,6 +45,10 @@ export class Api {
     };
   }
 
+  setStripeAccountID(stripeAccountID: string): void {
+    this.directChargeStripeAccountID = stripeAccountID;
+  }
+
   async registerDevice({
     label,
     registrationCode,
@@ -30,7 +57,7 @@ export class Api {
     label: string;
     registrationCode: string;
     location: string | null | undefined;
-  }): Promise<Stripe.Terminal.Reader | { error: Stripe.StripeAPIError }> {
+  }): Promise<Stripe.Terminal.Reader | { error: Stripe.StripeRawError }> {
     const formData = new URLSearchParams();
     formData.append('label', label);
     formData.append('registration_code', registrationCode);
@@ -53,7 +80,7 @@ export class Api {
     description?: string;
     paymentMethodTypes?: string;
     customer?: string;
-  }): Promise<Stripe.SetupIntent | { error: Stripe.StripeAPIError }> {
+  }): Promise<Stripe.SetupIntent | { error: Stripe.StripeRawError }> {
     const formData = new URLSearchParams();
     formData.append('description', description);
 
@@ -77,7 +104,7 @@ export class Api {
   async capturePaymentIntent(
     id: string,
     { amount_to_capture }: Stripe.PaymentIntentCaptureParams
-  ): Promise<Stripe.PaymentIntent | { error: Stripe.StripeAPIError }> {
+  ): Promise<Stripe.PaymentIntent | { error: Stripe.StripeRawError }> {
     const formData = new URLSearchParams();
 
     if (amount_to_capture) {
@@ -96,10 +123,13 @@ export class Api {
     currency = 'usd',
     description = 'Example PaymentIntent',
     payment_method_types,
+    payment_method_options,
     setup_future_usage,
     capture_method,
-  }: Stripe.PaymentIntentCreateParams): Promise<
-    Stripe.PaymentIntent | { error: Stripe.StripeError }
+    on_behalf_of,
+    application_fee_amount,
+  }: NewPaymentIntentCreateParams): Promise<
+    Stripe.PaymentIntent | { error: Stripe.StripeRawError }
   > {
     const formData = new URLSearchParams();
     formData.append('amount', amount.toString());
@@ -118,16 +148,51 @@ export class Api {
       });
     }
 
-    // TODO: implement connect functionality to set these values
-    // if (
-    //   this.connectedAccount &&
-    //   this.connectedAccount.type === ConnectChargeType.Destination
-    // ) {
-    //   formData.append('on_behalf_of', this.connectedAccount.id);
-    //   formData.append('transfer_data[destination]', this.connectedAccount.id);
-    // }
+    if (payment_method_options) {
+      if (payment_method_options.card_present) {
+        if (
+          payment_method_options.card_present.request_extended_authorization
+        ) {
+          formData.append(
+            'payment_method_options[card_present][request_extended_authorization]',
+            payment_method_options.card_present.request_extended_authorization.toString()
+          );
+        }
+        if (
+          payment_method_options.card_present
+            .request_incremental_authorization_support
+        ) {
+          formData.append(
+            'payment_method_options[card_present][request_incremental_authorization_support]',
+            payment_method_options.card_present.request_incremental_authorization_support.toString()
+          );
+        }
+        if (payment_method_options.card_present.routing.requested_priority) {
+          formData.append(
+            'payment_method_options[card_present][routing][requested_priority]',
+            payment_method_options.card_present.routing.requested_priority.toString()
+          );
+        }
+      }
+    }
+
+    if (on_behalf_of) {
+      formData.append('on_behalf_of', on_behalf_of);
+      formData.append('transfer_data[destination]', on_behalf_of);
+    }
+
+    if (application_fee_amount) {
+      formData.append('application_fee_amount', String(application_fee_amount));
+    }
 
     formData.append('payment_method_types[]', 'card_present');
+
+    if (
+      this.directChargeStripeAccountID &&
+      this.directChargeStripeAccountID.length > 0
+    ) {
+      this.headers['Stripe-Account'] = this.directChargeStripeAccountID;
+    }
 
     return fetch('https://api.stripe.com/v1/payment_intents', {
       headers: this.headers,
@@ -151,7 +216,7 @@ export class Api {
   static async getAccount(
     secretKey: string
   ): Promise<
-    (Stripe.Account & { secretKey: string }) | { error: Stripe.StripeAPIError }
+    (Stripe.Account & { secretKey: string }) | { error: Stripe.StripeRawError }
   > {
     const result = await fetch('https://api.stripe.com/v1/account', {
       headers: {
@@ -171,9 +236,16 @@ export class Api {
   }
 
   async createConnectionToken(): Promise<
-    Stripe.Terminal.ConnectionToken | { error: Stripe.StripeAPIError }
+    Stripe.Terminal.ConnectionToken | { error: Stripe.StripeRawError }
   > {
     const formData = new URLSearchParams();
+
+    if (
+      this.directChargeStripeAccountID &&
+      this.directChargeStripeAccountID.length > 0
+    ) {
+      this.headers['Stripe-Account'] = this.directChargeStripeAccountID;
+    }
     return fetch('https://api.stripe.com/v1/terminal/connection_tokens', {
       headers: this.headers,
       method: 'POST',
@@ -183,7 +255,7 @@ export class Api {
 
   async getCustomers(
     email?: string
-  ): Promise<Array<Stripe.Customer> | { error: Stripe.StripeAPIError }> {
+  ): Promise<Array<Stripe.Customer> | { error: Stripe.StripeRawError }> {
     const params = new URLSearchParams();
     if (email) {
       params.append('email', email);
@@ -203,7 +275,7 @@ export class Api {
 
   async createCustomer(
     email: string
-  ): Promise<Stripe.Customer | { error: Stripe.StripeAPIError }> {
+  ): Promise<Stripe.Customer | { error: Stripe.StripeRawError }> {
     const formData = new URLSearchParams();
     formData.append('email', email);
 
@@ -224,7 +296,7 @@ export class Api {
 
   async getPaymentIntent(
     id: string
-  ): Promise<Stripe.PaymentIntent | { error: Stripe.StripeAPIError }> {
+  ): Promise<Stripe.PaymentIntent | { error: Stripe.StripeRawError }> {
     const formData = new URLSearchParams();
 
     return fetch(`https://api.stripe.com/v1/payment_intents/${id}`, {
@@ -243,7 +315,7 @@ export class Api {
   }
 
   async lookupOrCreateExampleCustomer(): Promise<
-    Stripe.Customer | { error: Stripe.StripeAPIError }
+    Stripe.Customer | { error: Stripe.StripeRawError }
   > {
     const customerEmail = 'example@test.com';
     const customerList = await this.getCustomers(customerEmail);

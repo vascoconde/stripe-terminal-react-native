@@ -90,7 +90,8 @@ export namespace Reader {
     | 'wisePad3s'
     | 'wisePadEDevkit'
     | 'stripeS700Devkit'
-    | 'cotsDevice';
+    | 'cotsDevice'
+    | 'appleBuiltIn';
 
   export type InputOptions = 'insertCard' | 'swipeCard' | 'tapCard';
 
@@ -103,7 +104,8 @@ export namespace Reader {
     | 'swipeCard'
     | 'tryAnotherCard'
     | 'tryAnotherReadMethod'
-    | 'checkMobileDevice';
+    | 'checkMobileDevice'
+    | 'cardRemovedTooEarly';
 
   export type ConnectionStatus = 'connected' | 'connecting' | 'notConnected';
 }

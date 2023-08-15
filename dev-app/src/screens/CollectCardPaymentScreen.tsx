@@ -33,6 +33,12 @@ const CAPTURE_METHODS = [
   { value: 'manual', label: 'manual' },
 ];
 
+const ROUTING_PRIORITY = [
+  { value: '', label: 'default' },
+  { value: 'domestic', label: 'domestic' },
+  { value: 'international', label: 'international' },
+];
+
 export default function CollectCardPaymentScreen() {
   const { api, setLastSuccessfulChargeId, account } = useContext(AppContext);
 
@@ -44,15 +50,19 @@ export default function CollectCardPaymentScreen() {
     requestExtendedAuthorization?: boolean;
     requestIncrementalAuthorizationSupport?: boolean;
     captureMethod: 'automatic' | 'manual';
+    requestedPriority: 'domestic' | 'international' | '';
   }>({
     amount: '20000',
     currency: account?.default_currency || 'usd',
     captureMethod: 'manual',
+    requestedPriority: '',
   });
   const [testCardNumber, setTestCardNumber] = useState('4242424242424242');
   const [enableInterac, setEnableInterac] = useState(false);
   const [enableConnect, setEnableConnect] = useState(false);
   const [skipTipping, setSkipTipping] = useState(false);
+  const [enableUpdatePaymentIntent, setEnableUpdatePaymentIntent] =
+    useState(false);
   const [tipEligibleAmount, setTipEligibleAmount] = useState('');
   const { params } =
     useRoute<RouteProp<RouteParamList, 'CollectCardPayment'>>();
@@ -121,6 +131,18 @@ export default function CollectCardPaymentScreen() {
     if (enableInterac) {
       paymentMethods.push('interac_present');
     }
+    const routingPriority = {
+      requested_priority: inputValues.requestedPriority,
+    };
+    const paymentMethodOptions = {
+      card_present: {
+        request_extended_authorization:
+          inputValues.requestExtendedAuthorization,
+        request_incremental_authorization_support:
+          inputValues.requestIncrementalAuthorizationSupport,
+        routing: routingPriority,
+      },
+    };
     let paymentIntent: PaymentIntent.Type | undefined;
     let paymentIntentError: StripeError<CommonError> | undefined;
     if (discoveryMethod === 'internet') {
@@ -128,7 +150,12 @@ export default function CollectCardPaymentScreen() {
         amount: Number(inputValues.amount),
         currency: inputValues.currency,
         payment_method_types: paymentMethods,
+        payment_method_options: paymentMethodOptions,
         capture_method: inputValues?.captureMethod,
+        on_behalf_of: inputValues?.connectedAccountId,
+        application_fee_amount: inputValues?.applicationFeeAmount
+          ? Number(inputValues.applicationFeeAmount)
+          : undefined,
       });
 
       if ('error' in resp) {
@@ -174,6 +201,7 @@ export default function CollectCardPaymentScreen() {
             inputValues.requestExtendedAuthorization,
           requestIncrementalAuthorizationSupport:
             inputValues.requestIncrementalAuthorizationSupport,
+          requestedPriority: inputValues.requestedPriority,
         },
         captureMethod: inputValues?.captureMethod,
       });
@@ -252,6 +280,7 @@ export default function CollectCardPaymentScreen() {
       tipEligibleAmount: tipEligibleAmount
         ? Number(tipEligibleAmount)
         : undefined,
+      updatePaymentIntent: enableUpdatePaymentIntent,
     });
 
     if (error) {
@@ -496,6 +525,27 @@ export default function CollectCardPaymentScreen() {
         />
       </List>
 
+      <List bolded={false} topSpacing={false} title="ROUTING PRIORITY">
+        <Picker
+          selectedValue={inputValues?.requestedPriority}
+          style={styles.picker}
+          itemStyle={styles.pickerItem}
+          testID="select-routing-priority-picker"
+          onValueChange={(value) =>
+            setInputValues((state) => ({ ...state, requestedPriority: value }))
+          }
+        >
+          {ROUTING_PRIORITY.map((a) => (
+            <Picker.Item
+              key={a.value}
+              label={a.label}
+              testID={a.value}
+              value={a.value}
+            />
+          ))}
+        </Picker>
+      </List>
+
       <List bolded={false} topSpacing={false} title="CONNECT">
         <ListItem
           title="Enable Connect"
@@ -562,7 +612,11 @@ export default function CollectCardPaymentScreen() {
       <List bolded={false} topSpacing={false} title="TIP-ELIGIBLE AMOUNT">
         <TextInput
           testID="tip-eligible-amount"
-          keyboardType="numeric"
+          keyboardType={Platform.select({
+            ios: 'numbers-and-punctuation',
+            android: 'numeric',
+            default: 'numeric',
+          })}
           style={styles.input}
           value={tipEligibleAmount}
           onChangeText={(value: string) => setTipEligibleAmount(value)}
@@ -601,6 +655,19 @@ export default function CollectCardPaymentScreen() {
                   requestIncrementalAuthorizationSupport: value,
                 }))
               }
+            />
+          }
+        />
+      </List>
+
+      <List bolded={false} topSpacing={false} title="UPDATE PAYMENTINTENT">
+        <ListItem
+          title="Enable Update PaymentIntent"
+          rightElement={
+            <Switch
+              testID="enable-update-paymentIntent"
+              value={enableUpdatePaymentIntent}
+              onValueChange={(value) => setEnableUpdatePaymentIntent(value)}
             />
           }
         />

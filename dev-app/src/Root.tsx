@@ -61,19 +61,18 @@ export default function Root() {
     initAccount();
   }, [onSelectAccount]);
 
-  const fetchTokenProvider = async (): Promise<string> => {
+  const fetchTokenProvider = useCallback(async (): Promise<string> => {
     if (!api) {
       return '';
     }
     const resp = await api.createConnectionToken();
-
     if ('error' in resp) {
       console.log('could not fetch connection token');
       return '';
     }
 
     return resp?.secret || '';
-  };
+  }, []);
 
   return (
     <AppContext.Provider

@@ -16,6 +16,7 @@ import com.stripe.stripeterminal.external.callable.Cancelable
 import com.stripe.stripeterminal.external.callable.ReaderListenable
 import com.stripe.stripeterminal.external.models.CaptureMethod
 import com.stripe.stripeterminal.external.models.CardPresentParameters
+import com.stripe.stripeterminal.external.models.CardPresentRoutingOptionParameters
 import com.stripe.stripeterminal.external.models.Cart
 import com.stripe.stripeterminal.external.models.CollectConfiguration
 import com.stripe.stripeterminal.external.models.DiscoveryConfiguration
@@ -28,6 +29,7 @@ import com.stripe.stripeterminal.external.models.PaymentMethodType
 import com.stripe.stripeterminal.external.models.ReadReusableCardParameters
 import com.stripe.stripeterminal.external.models.Reader
 import com.stripe.stripeterminal.external.models.RefundParameters
+import com.stripe.stripeterminal.external.models.RoutingPriority
 import com.stripe.stripeterminal.external.models.SetupIntent
 import com.stripe.stripeterminal.external.models.SetupIntentCancellationParameters
 import com.stripe.stripeterminal.external.models.SetupIntentParameters
@@ -93,7 +95,7 @@ class StripeTerminalReactNativeModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     @Suppress("unused")
-    fun initialize(params: ReadableMap, promise: Promise) {
+    fun initialize(params: ReadableMap, promise: Promise) = withExceptionResolver(promise) {
         UiThreadUtil.runOnUiThread { onCreate(context.applicationContext as Application) }
 
         val result = if (!Terminal.isInitialized()) {
@@ -292,6 +294,7 @@ class StripeTerminalReactNativeModule(reactContext: ReactApplicationContext) :
         val extendedAuth = getBoolean(paymentMethodOptions, "requestExtendedAuthorization")
         val incrementalAuth =
             getBoolean(paymentMethodOptions, "requestIncrementalAuthorizationSupport")
+        val requestedPriority = paymentMethodOptions?.getString("requestedPriority")
         val captureMethod = params.getString("captureMethod")
 
         val paymentMethodTypes = paymentMethods?.toArrayList()?.mapNotNull {
@@ -343,9 +346,16 @@ class StripeTerminalReactNativeModule(reactContext: ReactApplicationContext) :
             intentParams.setSetupFutureUsage(it)
         }
 
+        val routingPriority = when (requestedPriority) {
+            "domestic" -> CardPresentRoutingOptionParameters(RoutingPriority.DOMESTIC)
+            "international" -> CardPresentRoutingOptionParameters(RoutingPriority.INTERNATIONAL)
+            else -> CardPresentRoutingOptionParameters(null)
+        }
+
         val cardPresentParams = CardPresentParameters.Builder()
             .setRequestExtendedAuthorization(extendedAuth)
             .setRequestIncrementalAuthorizationSupport(incrementalAuth)
+            .setRouting(routingPriority)
 
         intentParams.setPaymentMethodOptionsParameters(
             PaymentMethodOptionsParameters.Builder()
@@ -387,6 +397,9 @@ class StripeTerminalReactNativeModule(reactContext: ReactApplicationContext) :
                         .setEligibleAmount(tipEligibleAmount)
                         .build()
                 )
+            }
+            if (params.hasKey("updatePaymentIntent")) {
+                configBuilder.updatePaymentIntent(getBoolean(params, "updatePaymentIntent"))
             }
             val config = configBuilder.build()
 
@@ -474,7 +487,7 @@ class StripeTerminalReactNativeModule(reactContext: ReactApplicationContext) :
             val customerConsentCollected = getBoolean(params, "customerConsentCollected")
 
             val setupIntent = requireParam(setupIntents[setupIntentId]) {
-                "There is no created paymentIntent with id $setupIntentId"
+                "There is no created setupIntent with id $setupIntentId"
             }
             collectSetupIntentCancelable = terminal.collectSetupIntentPaymentMethod(
                 setupIntent,
@@ -569,8 +582,14 @@ class StripeTerminalReactNativeModule(reactContext: ReactApplicationContext) :
             val currency = requireParam(params.getString("currency")) {
                 "You must provide a currency value"
             }
+            val refundApplicationFee = params.getBoolean("refundApplicationFee")
+            val reverseTransfer = params.getBoolean("reverseTransfer")
 
-            val intentParams = RefundParameters.Builder(chargeId, amount, currency).build()
+            val intentParamsBuild = RefundParameters.Builder(chargeId, amount, currency)
+            intentParamsBuild.setRefundApplicationFee(refundApplicationFee)
+                .setReverseTransfer(reverseTransfer)
+            val intentParams = intentParamsBuild.build()
+
             collectRefundPaymentMethodCancelable = terminal.collectRefundPaymentMethod(
                 intentParams, NoOpCallback(promise)
             )
