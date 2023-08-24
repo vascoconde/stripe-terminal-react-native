@@ -132,7 +132,10 @@ dependencies {
     api 'com.facebook.react:react-native:+'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
     implementation "com.stripe:stripeterminal-core:$terminalAndroidSdkVersion"
-    implementation "com.stripe:stripeterminal-localmobile:$terminalAndroidSdkVersion"
+    implementation "com.stripe:stripeterminal-localmobile:$terminalAndroidSdkVersion" {
+        exclude group: 'org.bouncycastle'
+    }
+
     implementation "com.stripe:stripeterminal-handoffclient:$terminalAndroidSdkVersion"
     implementation 'com.google.code.gson:gson:2.3.1'
     implementation 'com.squareup.okhttp3:okhttp:4.9.1'
